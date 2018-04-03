@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script src="https://d3js.org/topojson.v2.min.js"></script>
+  <style>
+
+  * {
+    font-family: sans-serif;
+  }
+
+  circle {
+    stroke: steelblue;
+  }
+
+  .selected-county {
+    font-size: 26;
+    text-anchor: middle;
+  }
+
+
+  </style>
+<body>
+
+<script>
+
+  var height = 1000;
+  var width = 960;
+  var projection = d3.geoAlbers()
+    //  .translate([width/2, height/2])
+    //  .rotate([86.884,0])
+    //  .center([0,33.507]);
+  var path = d3.geoPath(projection);
+
+  var svg = d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+  var selected = svg.append("text")
+      .attr('class', 'selected-county')
+      .attr('transform', 'translate(' + width/2 + ',' + (height  - 450) + ')')
+      .text("Select a county.")
+
+  d3.csv("final_output_json_geoids.csv", function(g) {
+    var ids = [];
+    for (i = 0; i < g.length; i++) {
+      // console.log(g[i]);
+      ids.push(g[i]['GEOID']);
+    };
+    // console.log(ids);
+
+    d3.json("us_counties_geojson_low_detail.json", function(error, og_data) {
+      if (error) throw error;
+      console.log(og_data.features[200].properties);
+      svg.selectAll("circle")
+          .data(og_data.features)
+        .enter().append("circle")
+          .attr('class', 'county')
+          .attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+          .attr("fill", function(d) {
+            // console.log(d.properties.GEO_ID);
+            if (ids.indexOf(d.properties.GEO_ID) != -1){
+              return 'grey';
+            }else{
+              return 'white';
+            }
+          })
+          .attr("id", function(d) { return d.properties.GEO_ID; })
+          .attr("r", function(d) { return Math.sqrt(path.area(d) / Math.PI ); });
+
+      svg.selectAll(".county")
+          .on("click", function(d) {
+            selected.text("Results from " + d.properties.NAME + ", " + d.properties.STATE);
+          });
+
+    });
+  });
+</script>

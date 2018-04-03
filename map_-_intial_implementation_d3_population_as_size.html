@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script src="https://d3js.org/topojson.v2.min.js"></script>
+  <script src="https://d3js.org/d3-color.v1.min.js"></script>
+  <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+  <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+  <style>
+
+  * {
+    font-family: sans-serif;
+  }
+
+  circle {
+    stroke: steelblue;
+  }
+
+  .selected-county {
+    font-size: 26;
+    text-anchor: middle;
+  }
+
+  .chart{
+        height: 60%;
+        width: 60%
+    }
+
+
+
+  </style>
+<body>
+  <span id='map'></span>
+  <span id='bar_chart'></span>
+
+<script>
+
+
+  var width = 960;
+  var height = 500;
+
+  var projection = d3.geoAlbers();
+    //  .translate([width/2, height/2])
+    //  .rotate([86.884,0])
+    //  .center([0,33.507]);
+  var path = d3.geoPath(projection);
+
+  var svg = d3.select("#map").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+  var selected = svg.append("text")
+      .attr('class', 'selected-county')
+      .attr('transform', 'translate(' + width/2 + ',' + (height  - 450) + ')')
+      .text("Select a county.")
+
+  var opColor = d3.scaleSequential(d3.interpolateBlues);
+
+var anomalies = [];
+
+  d3.csv("dataset/final_output_json_geoids.csv", function(g) {
+    for (i = 0; i < g.length; i++) {
+      // console.log(g[i]);
+      anomalies.push(g[i]['GEOID']);
+    };
+  });
+     //console.log(anomalies);
+
+     var ids = [];
+    var pop = {};
+  d3.csv("dataset/output_joined.csv", function(g) {
+
+    for (i = 0; i < g.length; i++) {
+      ids.push(g[i]["GEOID"]);
+      if (g[i]["GEOID"].length == 4) {
+        pop["0" + g[i]["GEOID"]] = g[i]["TotalPop"];
+      } else {
+        pop[g[i]["GEOID"]] = g[i]["TotalPop"];
+      }
+    };
+  });
+    //console.log(pop);
+
+    d3.json("dataset/us_counties_geojson_low_detail.json", function(error, og_data) {
+      if (error) throw error;
+      //console.log(og_data.features[200].properties);
+
+
+      // opColor.domain([0, d3.max(g, function(d) {
+      //     return d["Republican 2016"];
+      //   ;})]);
+
+      svg.selectAll("circle")
+          .data(og_data.features)
+        .enter().append("circle")
+          .attr('class', 'county')
+          .attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+          .attr("fill", function(d) {
+            // console.log(d.properties.GEO_ID);
+            if (anomalies.indexOf(d.properties.GEO_ID) != -1){
+              return 'grey';
+            }else{
+              return 'rgba(255, 255, 255, 0.0)';
+            }
+          })
+          .attr("id", function(d) { return d.properties.GEO_ID; })
+          .attr("r", function(d) {
+            return Math.sqrt(pop[d.properties.GEO_ID.slice(-5)]/ 6557746 * 20000) / Math.PI;
+          });
+
+      svg.selectAll(".county")
+          .on("click", function(d) {
+            selected.text("Results from " + d.properties.NAME + ", " + d.properties.STATE + " Population: " + pop[d.properties.GEO_ID.slice(-5)]);
+            createChart(d.properties.GEO_ID.slice(-5));
+          });
+
+    });
+
+    function createChart(geo_id)
+    {
+      d3.select("#bar_chart svg").remove();
+      var bar_data = {};
+
+      if(geo_id.startsWith("0"))
+        geo_id = geo_id.slice(1,geo_id.length);
+      console.log(geo_id);
+      d3.csv("dataset/output_joined.csv",function(data){
+        for(i=0;i<data.length;i++){
+          if(data[i].GEOID == geo_id){
+            bar_data['CO2limits'] = data[i].CO2limits;
+            bar_data['regulate'] = data[i].regulate;
+            bar_data['fundrenewables'] =  data[i].fundrenewables;
+          }
+
+        }
+
+        //here is plotting
+        width = 450;
+       // height = 700;
+        margin = {top: 100, right: 20, bottom: 200, left: 40};
+        var svg = d3.select("#bar_chart").append('svg').attr("width",width).attr("height",height);
+
+
+var test_data=[{ 'key': 'CO2limits', 'value': bar_data.CO2limits }, { 'key': 'regulate', 'value': bar_data.regulate },{ 'key': 'fundrenewables', 'value': bar_data.fundrenewables}];
+var x = d3.scaleBand().rangeRound([0, width-margin.left - margin.right]).padding(0.1),
+    y = d3.scaleLinear().rangeRound([height- margin.top - margin.bottom, 0]);
+
+var g = svg.append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+
+    x.domain(['CO2limits', 'regulate', 'fundrenewables']);
+    y.domain([0, 100]);
+
+
+
+  g.append("g")
+      .attr("class", "axis axis--x")
+      .attr("transform", "translate(0," +(height- margin.top - margin.bottom) + ")")
+      .call(d3.axisBottom(x))
+      .selectAll("text")
+                    .attr("transform", "rotate(-65)")
+                    .text(function(d,i){return ['Set CO2 limits on existing coal fire', 'Regulate CO2 as pollutants', 'Fund research into renewable resources'
+][i]})
+                    .style("text-anchor", "end")
+                    .attr("dx", "-.8em")
+                    .attr("dy", ".15em");;
+
+  g.append("g")
+      .attr("class", "axis axis--y")
+      .call(d3.axisLeft(y).ticks(10))
+    .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", "0.71em")
+      .attr("text-anchor", "end")
+      .text("something");
+
+  g.selectAll(".bar")
+    .data(test_data)
+    .enter().append("rect")
+      .attr("class", "bar")
+      .attr("x", function(d) { return x(d.key); })
+      .attr("y", function(d) { return y(d.value); })
+      .attr('fill','steelblue')
+      .attr("width", x.bandwidth())
+      .attr("height", function(d) { return height- margin.top - margin.bottom - y(d.value); });
+      })
+    }
+
+</script>
